@@ -6,12 +6,19 @@ require("dotenv").config();
 const connection = { url: process.env.REDIS_URL };
 
 const worker = new Worker("jobs", async (job) => {
-  const { jobId, url, body } = job.data;
+  const { jobId } = job.data;
 
   await pool.query("UPDATE jobs SET status = 'running', updated_at = now() WHERE id = $1", [jobId]);
 
   try {
-    await axios.post(url, body ?? {});
+    if (job.name === "webhook") {
+      const { url, body } = job.data;
+      await axios.post(url, body ?? {});
+    } else if (job.name === "delay") {
+      const { seconds } = job.data;
+      await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+    }
+
     await pool.query(
       "UPDATE jobs SET status = 'succeeded', updated_at = now() WHERE id = $1",
       [jobId]
@@ -21,7 +28,7 @@ const worker = new Worker("jobs", async (job) => {
       "UPDATE jobs SET attempts = attempts + 1, last_error = $2, status = 'failed', updated_at = now() WHERE id = $1",
       [jobId, err.message]
     );
-    throw err; // re-throwing tells BullMQ to retry per the attempts/backoff config
+    throw err;
   }
 }, { connection });
 

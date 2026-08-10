@@ -8,19 +8,24 @@ app.use(express.json());
 app.post("/jobs", async (req, res) => {
   const { type, payload } = req.body;
 
-  if (type !== "webhook" || !payload?.url) {
-    return res.status(400).json({ error: "expected { type: 'webhook', payload: { url, body } }" });
+  const validTypes = ["webhook", "delay"];
+  if (!validTypes.includes(type)) {
+    return res.status(400).json({ error: `type must be one of: ${validTypes.join(", ")}` });
+  }
+  if (type === "webhook" && !payload?.url) {
+    return res.status(400).json({ error: "webhook jobs require payload.url" });
+  }
+  if (type === "delay" && typeof payload?.seconds !== "number") {
+    return res.status(400).json({ error: "delay jobs require payload.seconds (a number)" });
   }
 
-  // 1. Record the job in Postgres — this is our source of truth
   const result = await pool.query(
     "INSERT INTO jobs (type, payload) VALUES ($1, $2) RETURNING id",
     [type, payload]
   );
   const jobId = result.rows[0].id;
 
-  // 2. Hand it to BullMQ to actually get processed
-  await jobQueue.add("webhook", { jobId, ...payload }, {
+  await jobQueue.add(type, { jobId, ...payload }, {
     attempts: 5,
     backoff: { type: "exponential", delay: 2000 },
   });
