@@ -27,10 +27,15 @@ app.post("/jobs", async (req, res) => {
   );
   const jobId = result.rows[0].id;
 
-  await jobQueue.add(type, { jobId, ...payload }, {
-    attempts: 5,
-    backoff: { type: "exponential", delay: 2000 },
-  });
+  try {
+    await jobQueue.add(type, { jobId, ...payload }, {
+      attempts: 5,
+      backoff: { type: "exponential", delay: 2000 },
+    });
+    console.log(`Job ${jobId} added to queue successfully`);
+  } catch (err) {
+    console.error(`Failed to add job ${jobId} to queue:`, err.message);
+  }
 
   res.status(201).json({ id: jobId, status: "queued" });
 });
