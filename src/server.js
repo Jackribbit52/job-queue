@@ -15,3 +15,8 @@ const queueEvents = new QueueEvents("jobs", { connection: { url: process.env.RED
 
 const port = process.env.PORT || 3000;
 server.listen(port, () => console.log(`API listening on :${port}`));
+
+if (process.env.RUN_WORKER_INLINE === "true") {
+  const startWorker = require("./startWorker");
+  startWorker();
+}
