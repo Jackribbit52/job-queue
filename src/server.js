@@ -1,9 +1,11 @@
 const express = require("express");
 const pool = require("./db");
 const jobQueue = require("./queue");
+const cors = require("cors");
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 app.post("/jobs", async (req, res) => {
   const { type, payload } = req.body;
@@ -33,5 +35,25 @@ app.post("/jobs", async (req, res) => {
   res.status(201).json({ id: jobId, status: "queued" });
 });
 
+app.get("/jobs", async (req, res) => {
+  const result = await pool.query("SELECT * FROM jobs ORDER BY created_at DESC");
+  res.json(result.rows);
+});
+
+const http = require("http");
+const { Server } = require("socket.io");
+const { QueueEvents } = require("bullmq");
+
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
+io.on("connection", () => console.log("dashboard connected"));
+
+// Listen to what's happening in the queue, regardless of which process caused it
+const queueEvents = new QueueEvents("jobs", { connection: { url: process.env.REDIS_URL } });
+["waiting", "active", "completed", "failed"].forEach((event) => {
+    queueEvents.on(event, () => io.emit("jobs:updated"));
+});
+
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`API listening on :${port}`));
+server.listen(port, () => console.log(`API listening on :${port}`));
