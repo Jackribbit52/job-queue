@@ -1,10 +1,11 @@
+const createConnection = require("./redisConnection");
 const { Worker } = require("bullmq");
 const axios = require("axios");
 const pool = require("./db");
 require("dotenv").config();
 
 function startWorker() {
-  const connection = { url: process.env.REDIS_URL };
+  const connection = createConnection();
 
   const worker = new Worker("jobs", async (job) => {
     const { jobId } = job.data;
