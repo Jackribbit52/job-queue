@@ -10,15 +10,24 @@ app.use(express.json());
 
 // TEMP diagnostic route — remove after debugging Render/Upstash connectivity.
 app.get("/health/redis", async (req, res) => {
+  const raw = process.env.REDIS_URL || "";
+  const scheme = raw.split("://")[0] || null;
+  const hostPort = raw.split("@")[1] || null; // no credentials, just host:port/db
+
   const conn = createConnection();
+  const events = [];
+  ["connect", "ready", "error", "close", "reconnecting", "end"].forEach((e) =>
+    conn.on(e, (arg) => events.push(e + (arg?.message ? `: ${arg.message}` : "")))
+  );
+
   try {
     const pong = await Promise.race([
       conn.ping(),
       new Promise((_, reject) => setTimeout(() => reject(new Error("ping timed out after 5s")), 5000)),
     ]);
-    res.json({ ok: true, pong, status: conn.status });
+    res.json({ ok: true, pong, status: conn.status, scheme, hostPort, events });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message, code: err.code, status: conn.status });
+    res.status(500).json({ ok: false, error: err.message, code: err.code, status: conn.status, scheme, hostPort, events });
   } finally {
     conn.disconnect();
   }
